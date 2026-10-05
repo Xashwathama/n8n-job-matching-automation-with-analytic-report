@@ -1,0 +1,583 @@
+{
+  "name": "Job Matching Automation with Visual Analytics",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "9892d82a-7436-405b-939a-f9ebd4ee0f53",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -864,
+        -256
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "YOUR_RESUME_FILE_ID",
+          "mode": "list",
+          "cachedResultName": "YOUR_RESUME_FILE.pdf",
+          "cachedResultUrl": "https://drive.google.com/file/d/YOUR_RESUME_FILE_ID/view?usp=drivesdk"
+        },
+        "options": {}
+      },
+      "id": "06676bb9-73f5-4236-920b-38940d1c9371",
+      "name": "Resume file",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -608,
+        -256
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "2c42a78e-ab39-4b08-aa5f-fcc69cb08c92",
+      "name": "Extract Resume Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -432,
+        -256
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a resume data extraction engine.\n\nYour ONLY task is to extract factual information from the provided resume.\n\nIMPORTANT RULES:\n\n* Do NOT write a summary.\n* Do NOT explain your answer.\n* Do NOT use Markdown.\n* Do NOT add comments.\n* Do NOT invent or infer information.\n* If information is unavailable, return an empty string or empty array.\n* Extract skills only when they are explicitly present in the resume.\n* Normalize obvious variations such as:\n\n  * \"Structured Query Language\" → \"SQL\"\n  * \"Power BI Desktop\" → \"Power BI\"\n  * \"MS Excel\" → \"Excel\"\n* Keep experience level based on explicit evidence in the resume.\n* A student with no professional employment experience should generally be represented as \"Fresher\", unless the resume explicitly demonstrates otherwise.\n\nExtract the following information:\n\n* Candidate name\n* Email\n* Phone\n* Location\n* Target job roles\n* Technical skills\n* Soft skills\n* Programming languages\n* Data/analytics tools\n* Years of professional experience\n* Experience level\n* Education\n* Certifications\n* Preferred job type\n* Preferred locations\n\nOUTPUT FORMAT: Return ONLY a single valid JSON object (no code fences) with exactly these keys:\ncandidate_name, email, phone, location, target_job_roles (array), technical_skills (array), soft_skills (array), programming_languages (array), data_analytics_tools (array), years_of_experience, experience_level, education (array), certifications (array), preferred_job_type, preferred_locations (array).\n\nResume text:\n\n{{ $json.text }}\n",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": []
+        },
+        "batching": {}
+      },
+      "id": "524536e3-f5db-44bf-881a-d0edf7b5f336",
+      "name": "AI Resume Parser",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -224,
+        -256
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash",
+        "options": {}
+      },
+      "id": "6202a7ad-0121-4eb6-9739-195cabd2e969",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -224,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "Run actor and get dataset",
+        "actorId": {
+          "__rl": true,
+          "value": "YOUR_APIFY_ACTOR_ID",
+          "mode": "list",
+          "cachedResultName": "YOUR_APIFY_ACTOR",
+          "cachedResultUrl": "https://console.apify.com/actors/YOUR_APIFY_ACTOR_ID/input"
+        },
+        "customBody": "={{ (() => { let p = $json.output || {}; if (!p || typeof p !== 'object') { try { p = JSON.parse(String($json.text || '').replace(/\\u0060\\u0060\\u0060json|\\u0060\\u0060\\u0060/g, '').trim()); } catch (e) { p = {}; } } const roles = (Array.isArray(p.target_job_roles) ? p.target_job_roles : []).map(x => String(x).trim()).filter(Boolean).slice(0,3); const locs = (Array.isArray(p.preferred_locations) ? p.preferred_locations : []).map(x => String(x).trim()).filter(Boolean).slice(0,3); if (!locs.length && p.location) locs.push(String(p.location).trim()); if (!roles.length) roles.push('Data Analyst'); if (!locs.length) locs.push('India'); const urls = []; for (const role of roles) for (const loc of locs) urls.push('https://www.linkedin.com/jobs/search/?keywords=' + encodeURIComponent(role) + '&location=' + encodeURIComponent(loc)); return JSON.stringify({ urls: urls.slice(0,9), limitPerSource: 10, autoConvertToAiSearch: true, scrapeCompany: false }); })() }}",
+        "timeout": {},
+        "authentication": "apifyOAuth2Api"
+      },
+      "id": "f539bc53-a86a-436c-bfb7-9540e065f3e8",
+      "name": "Job Scraper",
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        144,
+        -64
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "FIELDS={\"job_id\":[\"id\",\"jobId\",\"job_id\",\"linkedinJobId\",\"entityUrn\"],\"job_title\":[\"title\",\"jobTitle\",\"job_title\",\"position\"],\"company\":[\"companyName\",\"company\",\"company_name\",\"employer\"],\"location\":[\"location\",\"jobLocation\",\"job_location\"],\"job_type\":[\"employmentType\",\"employment_type\",\"jobType\",\"job_type\",\"type\"],\"experience_level\":[\"experienceLevel\",\"experience_level\",\"seniorityLevel\",\"seniority\",\"level\"],\"description\":[\"description\",\"jobDescription\",\"job_description\",\"descriptionText\"],\"posted_date\":[\"postedAt\",\"posted_at\",\"datePosted\",\"date_posted\",\"publishedAt\"],\"job_url\":[\"jobUrl\",\"job_url\",\"url\",\"link\",\"applyUrl\",\"apply_url\"],\"skills\":[\"skills\",\"requiredSkills\",\"required_skills\",\"keywords\"]}\n\ndef clean(v):\n    if v is None:return \"\"\n    if isinstance(v,(list,dict)):return v\n    return \" \".join(str(v).replace(\"\\n\",\" \").replace(\"\\r\",\" \").replace(\"\\t\",\" \").split())\n\ndef first(d,keys):\n    for k in keys:\n        if d.get(k) not in (None,\"\"):return d[k]\n    return \"\"\n\ndef listify(v):\n    if v in (None,\"\"):return []\n    vals=v if isinstance(v,list) else str(v).replace(\"; \",\",\").replace(\";\",\",\").replace(\"|\",\",\").replace(\"\\n\",\",\").split(\",\")\n    out=[]\n    for x in vals:\n        x=clean(x)\n        if x and x not in out:out.append(x)\n    return out\n\nresume=None\njobs=[]\nfor item in _items:\n    j=item.get(\"json\",{})\n    if not isinstance(j,dict):continue\n    parsed=j.get(\"output\")\n    if isinstance(parsed,dict) and (\"target_job_roles\" in parsed or \"technical_skills\" in parsed):\n        resume=parsed\n        continue\n    if (\"candidate_name\" in j and \"target_job_roles\" in j) and not any(j.get(k) for k in (\"title\",\"jobTitle\",\"job_id\",\"jobId\")):\n        resume=j\n        continue\n    jobs.append(j)\nif resume is None:raise Exception(\"Structured resume output was not found in the merged input.\")\nout=[]\nseen=set()\nfor j in jobs:\n    r={k:(listify(first(j,ks)) if k==\"skills\" else clean(first(j,ks))) for k,ks in FIELDS.items()}\n    key=r[\"job_id\"] or r[\"job_url\"] or \"|\".join([r[\"job_title\"],r[\"company\"],r[\"location\"]]).lower()\n    if key in seen:continue\n    seen.add(key)\n    r[\"data_quality\"]={f\"has_{k}\":bool(r[k]) for k in (\"job_id\",\"job_title\",\"company\",\"location\",\"description\",\"job_url\")}\n    r[\"resume\"]=resume\n    out.append({\"json\":r})\nreturn out"
+      },
+      "id": "585e1fd2-d070-4c96-be4f-d55e703bd2f3",
+      "name": "Normalize Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        -240
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "# =====================================================================\n#  CALCULATE JOB MATCH\n#  n8n Code node  |  Language: Python  |  Mode: Run Once for All Items\n#\n#  Deterministic, explainable resume-to-job matching. NO imports.\n#  Input : one item per normalized job. Each item carries `resume`\n#          (the parsed resume object) attached by the \"Attach Resume\" node.\n#  Output: one item per job (score, breakdown, matched/missing skills, summary)\n# =====================================================================\n\nENGINE_VERSION = \"1.1.1\"\n\n# ---------------------------------------------------------------------\n# 1. CONFIGURATION  (edit here, nothing else needs to change)\n# ---------------------------------------------------------------------\nWEIGHTS = {\n    \"skills\": 40,\n    \"experience\": 20,\n    \"job_title\": 15,\n    \"location\": 10,\n    \"job_type\": 5,\n    \"education\": 10,\n}  # must add up to 100\n\n# Percentage (0-100) given when the data needed to judge a dimension is missing.\nNEUTRAL = {\n    \"skills_unknown\": 50,           # no skills detectable in the job\n    \"experience_unspecified\": 80,   # job states no experience requirement (not punished)\n    \"title_no_target\": 50,          # resume has no target roles\n    \"location_unknown\": 50,         # job or resume location missing\n    \"job_type_no_pref\": 80,         # resume has no job-type preference\n    \"job_type_unknown\": 60,         # job has no job type\n    \"education_unspecified\": 80,    # job states no degree requirement\n    \"education_candidate_unknown\": 50,  # job wants a degree, resume education unreadable\n}\n\n# If True: MySQL/PostgreSQL imply SQL, Pandas/NumPy/... imply Python, PySpark implies Spark\nAPPLY_IMPLIED_SKILLS = True\n\nCANDIDATE_SKILL_FIELDS = [\n    \"technical_skills\", \"programming_languages\", \"analytics_tools\",\n    \"tools\", \"databases\", \"skills\", \"technical_tools\", \"software_tools\",\n    \"technologies\", \"tech_stack\",\n]\n\n# ---------------------------------------------------------------------\n# 2. CONTROLLED SKILL VOCABULARY  (canonical name -> alias phrases)\n#    Extend by adding a new key or appending aliases.\n# ---------------------------------------------------------------------\nSKILL_VOCAB = {\n    \"python\": [\"python\", \"python programming\", \"python3\", \"python 3\"],\n    \"sql\": [\"sql\", \"structured query language\", \"t sql\", \"tsql\", \"pl sql\", \"plsql\",\n            \"sql queries\", \"sql programming\"],\n    \"r\": [\"r programming\", \"r language\", \"rstudio\", \"r studio\"],  # bare \"R\" handled separately\n    \"excel\": [\"excel\", \"ms excel\", \"microsoft excel\", \"advanced excel\"],\n    \"power bi\": [\"power bi\", \"powerbi\", \"microsoft power bi\", \"ms power bi\",\n                 \"power bi desktop\", \"power bi service\"],\n    \"tableau\": [\"tableau\", \"tableau desktop\", \"tableau public\"],\n    \"looker\": [\"looker\", \"looker studio\", \"google data studio\", \"data studio\"],\n    \"qlik\": [\"qlik\", \"qlikview\", \"qlik sense\"],\n    \"pandas\": [\"pandas\"],\n    \"numpy\": [\"numpy\"],\n    \"matplotlib\": [\"matplotlib\"],\n    \"seaborn\": [\"seaborn\"],\n    \"scikit-learn\": [\"scikit learn\", \"sklearn\"],\n    \"tensorflow\": [\"tensorflow\"],\n    \"pytorch\": [\"pytorch\"],\n    \"postgresql\": [\"postgresql\", \"postgres\", \"postgre sql\"],\n    \"mysql\": [\"mysql\", \"my sql\"],\n    \"sql server\": [\"sql server\", \"ms sql\", \"mssql\", \"microsoft sql server\"],\n    \"mongodb\": [\"mongodb\", \"mongo db\", \"mongo\"],\n    \"snowflake\": [\"snowflake\"],\n    \"bigquery\": [\"bigquery\", \"big query\"],\n    \"databricks\": [\"databricks\"],\n    \"aws\": [\"aws\", \"amazon web services\"],\n    \"azure\": [\"azure\", \"microsoft azure\"],\n    \"gcp\": [\"gcp\", \"google cloud\", \"google cloud platform\"],\n    \"spark\": [\"spark\", \"apache spark\"],\n    \"pyspark\": [\"pyspark\"],\n    \"hadoop\": [\"hadoop\"],\n    \"airflow\": [\"airflow\", \"apache airflow\"],\n    \"dbt\": [\"dbt\"],\n    \"etl\": [\"etl\", \"extract transform load\"],\n    \"dax\": [\"dax\"],\n    \"power query\": [\"power query\"],\n    \"vba\": [\"vba\"],\n    \"google sheets\": [\"google sheets\"],\n    \"git\": [\"git\"],\n    \"github\": [\"github\"],\n    \"jupyter\": [\"jupyter\", \"jupyter notebook\"],\n    \"machine learning\": [\"machine learning\", \"ml\"],\n    \"deep learning\": [\"deep learning\"],\n    \"nlp\": [\"nlp\", \"natural language processing\"],\n    \"statistics\": [\"statistics\", \"statistical analysis\", \"statistical modeling\",\n                   \"statistical modelling\", \"statistical\"],\n    \"data visualization\": [\"data visualization\", \"data visualisation\", \"data viz\"],\n    \"data modeling\": [\"data modeling\", \"data modelling\"],\n    \"data warehousing\": [\"data warehousing\", \"data warehouse\", \"data warehouses\"],\n    \"a/b testing\": [\"a b testing\", \"ab testing\", \"a b tests\"],\n    \"sas\": [\"sas\"],\n    \"java\": [\"java\"],\n    \"javascript\": [\"javascript\"],\n}\n\nIMPLIED_SKILLS = {\n    \"pandas\": [\"python\"], \"numpy\": [\"python\"], \"matplotlib\": [\"python\"],\n    \"seaborn\": [\"python\"], \"scikit-learn\": [\"python\"],\n    \"tensorflow\": [\"python\"], \"pytorch\": [\"python\"],\n    \"mysql\": [\"sql\"], \"postgresql\": [\"sql\"], \"sql server\": [\"sql\"],\n    \"pyspark\": [\"spark\", \"python\"],\n}\n\nDISPLAY_NAMES = {\n    \"sql\": \"SQL\", \"aws\": \"AWS\", \"gcp\": \"GCP\", \"etl\": \"ETL\", \"dax\": \"DAX\",\n    \"nlp\": \"NLP\", \"sas\": \"SAS\", \"r\": \"R\", \"vba\": \"VBA\", \"dbt\": \"dbt\",\n    \"power bi\": \"Power BI\", \"mysql\": \"MySQL\", \"postgresql\": \"PostgreSQL\",\n    \"mongodb\": \"MongoDB\", \"pyspark\": \"PySpark\", \"numpy\": \"NumPy\",\n    \"github\": \"GitHub\", \"bigquery\": \"BigQuery\", \"sql server\": \"SQL Server\",\n    \"scikit-learn\": \"Scikit-learn\", \"a/b testing\": \"A/B Testing\",\n    \"javascript\": \"JavaScript\", \"tensorflow\": \"TensorFlow\", \"pytorch\": \"PyTorch\",\n    \"databricks\": \"Databricks\", \"qlik\": \"Qlik\",\n}\n\n# Experience level text (LinkedIn \"seniority\") -> (min_years, max_years); first match wins\nEXP_LEVEL_MAP = [\n    (\"mid senior\", 3, None), (\"senior\", 5, None), (\"director\", 8, None),\n    (\"executive\", 8, None), (\"internship\", 0, 1), (\"intern\", 0, 1),\n    (\"entry\", 0, 1), (\"fresher\", 0, 1), (\"trainee\", 0, 1), (\"graduate\", 0, 1),\n    (\"junior\", 0, 2), (\"associate\", 0, 2),\n]\nTITLE_LEVEL_MAP = [\n    (\"senior\", 5, None), (\"sr\", 5, None), (\"lead\", 5, None), (\"principal\", 6, None),\n    (\"head\", 8, None), (\"director\", 8, None), (\"junior\", 0, 2), (\"jr\", 0, 2),\n    (\"intern\", 0, 1), (\"internship\", 0, 1), (\"trainee\", 0, 1), (\"fresher\", 0, 1),\n    (\"graduate\", 0, 1),\n]\n\n# Title matching\nSENIORITY_UP = [\"senior\", \"sr\", \"lead\", \"principal\", \"staff\", \"head\", \"director\",\n                \"manager\", \"vp\", \"chief\"]\nSENIORITY_DOWN = [\"junior\", \"jr\", \"intern\", \"internship\", \"trainee\", \"associate\",\n                  \"fresher\", \"graduate\", \"entry\", \"level\"]\nROLE_TYPE_WORDS = [\"analyst\", \"engineer\", \"scientist\", \"developer\", \"specialist\",\n                   \"consultant\", \"executive\", \"officer\", \"architect\"]\nTITLE_FILLER = [\"and\", \"of\", \"the\", \"for\", \"a\", \"an\", \"in\", \"at\", \"to\", \"with\", \"i\", \"ii\", \"iii\"]\nTITLE_SYNONYMS = {\"analytics\": \"analyst\", \"analysis\": \"analyst\", \"analysts\": \"analyst\",\n                  \"jr\": \"junior\", \"sr\": \"senior\", \"engineers\": \"engineer\",\n                  \"scientists\": \"scientist\", \"developers\": \"developer\"}\n\n# Location\nCOUNTRIES = [\"india\", \"united states\", \"usa\", \"united kingdom\", \"uk\", \"canada\",\n             \"germany\", \"singapore\", \"uae\", \"united arab emirates\", \"australia\"]\nCITY_SYNONYMS = {\"bengaluru\": \"bangalore\", \"bombay\": \"mumbai\", \"gurugram\": \"gurgaon\",\n                 \"new delhi\": \"delhi\", \"madras\": \"chennai\", \"calcutta\": \"kolkata\"}\nLOC_FILLER = [\"greater\", \"area\", \"metropolitan\", \"region\", \"district\", \"urban\"]\n\n# Job type\nJOB_TYPE_ALIASES = [\n    (\"internship\", [\"internship\", \"intern\"]),\n    (\"part-time\", [\"part time\", \"parttime\"]),\n    (\"full-time\", [\"full time\", \"fulltime\", \"permanent\"]),\n    (\"contract\", [\"contract\", \"contractor\", \"temporary\", \"freelance\"]),\n]\n\n# Education\nCAND_EDU_LEVELS = [\n    (4, [\"phd\", \"ph d\", \"doctorate\", \"doctoral\"]),\n    (3, [\"master\", \"masters\", \"m tech\", \"mtech\", \"m sc\", \"msc\", \"mba\", \"mca\",\n         \"m e\", \"m s\", \"pgdm\", \"post graduate\", \"postgraduate\"]),\n    (2, [\"bachelor\", \"bachelors\", \"b tech\", \"btech\", \"b e\", \"b sc\", \"bsc\", \"b com\",\n         \"bcom\", \"bca\", \"bba\", \"undergraduate\"]),\n    (1, [\"diploma\", \"associate degree\"]),\n]\nJOB_EDU_LEVELS = [\n    (4, [\"phd\", \"ph d\", \"doctorate\", \"doctoral\"]),\n    (3, [\"master\", \"masters\", \"mba\", \"m tech\", \"mtech\", \"msc\", \"m sc\",\n         \"postgraduate\", \"post graduate\"]),\n    (2, [\"bachelor\", \"bachelors\", \"b tech\", \"btech\", \"bsc\", \"b sc\", \"undergraduate\"]),\n    (1, [\"diploma\"]),\n]\nEDU_LEVEL_NAMES = {0: \"unknown\", 1: \"diploma\", 2: \"bachelor's\", 3: \"master's\", 4: \"PhD\"}\nJOB_EDU_FIELDS = [\"computer science\", \"information technology\", \"data science\",\n                  \"statistics\", \"mathematics\", \"engineering\", \"analytics\",\n                  \"artificial intelligence\", \"business\", \"economics\", \"finance\",\n                  \"information systems\", \"operations research\", \"computer applications\"]\nCAND_DATA_RELATED = [\"computer\", \"information technology\", \"data\", \"statistic\",\n                     \"mathematic\", \"artificial intelligence\", \"machine learning\",\n                     \"analytic\", \"engineering\", \"software\", \"information system\",\n                     \"economics\", \"business\"]\nPREFERRED_WORDS = [\" preferred \", \" plus \", \" advantage \", \" desirable \",\n                   \" good to have \", \" nice to have \", \" a bonus \"]\n\n\n# ---------------------------------------------------------------------\n# 3. SMALL HELPERS (no imports)\n# ---------------------------------------------------------------------\ndef plain(x):\n    \"\"\"Convert n8n/Pyodide proxy objects to normal Python if needed.\"\"\"\n    # The native Python runner already passes plain dicts/lists, and\n    # hasattr() is not available in its sandbox, so no conversion is needed.\n    return x\n\n\ndef sval(x):\n    x = plain(x)\n    if x is None:\n        return \"\"\n    return str(x).strip()\n\n\ndef clean(s):\n    \"\"\"lowercase; keep letters/digits/+/#; everything else -> single space.\"\"\"\n    s = sval(s).lower()\n    out = []\n    for ch in s:\n        if ch.isalnum() or ch in \"+#\":\n            out.append(ch)\n        else:\n            out.append(\" \")\n    return \" \".join(\"\".join(out).split())\n\n\ndef clean_text(v):\n    \"\"\"Light cleanup used by the new extractors: str, trimmed, single spaces.\n    (Unlike clean(), it keeps '.', '-' and '+', so '2.5 years' and '3+ years' survive.)\"\"\"\n    return \" \".join(sval(v).split())\n\n\ndef padded(s):\n    return \" \" + clean(s) + \" \"\n\n\ndef flatten_text(x):\n    x = plain(x)\n    if x is None:\n        return \"\"\n    if isinstance(x, (list, tuple)):\n        return \" ; \".join([flatten_text(i) for i in x])\n    if isinstance(x, dict):\n        return \" ; \".join([flatten_text(v) for v in x.values()])\n    return str(x)\n\n\ndef as_list(v):\n    v = plain(v)\n    if v is None:\n        return []\n    if isinstance(v, (list, tuple)):\n        out = []\n        for i in v:\n            i = plain(i)\n            if i is None:\n                continue\n            if isinstance(i, (list, tuple, dict)):\n                out.append(flatten_text(i))\n            else:\n                out.append(str(i))\n        return [s.strip() for s in out if s and s.strip()]\n    if isinstance(v, dict):\n        return [flatten_text(v)]\n    s = str(v).replace(\";\", \",\")\n    return [p.strip() for p in s.split(\",\") if p.strip()]\n\n\ndef to_number(v):\n    v = plain(v)\n    if v is None or isinstance(v, bool):\n        return None\n    if isinstance(v, (int, float)):\n        return float(v)\n    num = \"\"\n    started = False\n    for ch in str(v):\n        if ch.isdigit():\n            num += ch\n            started = True\n        elif ch == \".\" and started and \".\" not in num:\n            num += ch\n        elif started:\n            break\n    try:\n        return float(num) if num not in (\"\", \".\") else None\n    except Exception:\n        return None\n\n\ndef clamp(x, lo=0.0, hi=100.0):\n    return max(lo, min(hi, x))\n\n\ndef pretty(s):\n    if s in DISPLAY_NAMES:\n        return DISPLAY_NAMES[s]\n    return \" \".join([w.capitalize() for w in str(s).split(\" \")])\n\n\ndef uniq(seq):\n    out = []\n    for s in seq:\n        if s not in out:\n            out.append(s)\n    return out\n\n\n# ---------------------------------------------------------------------\n# 4. SKILL NORMALIZATION & EXTRACTION\n# ---------------------------------------------------------------------\nSKILL_PHRASES = []\nfor _canon in SKILL_VOCAB:\n    _aliases = [clean(a) for a in SKILL_VOCAB[_canon]]\n    if _canon != \"r\":                      # bare \"r\" would match \"R&D\" -> handled separately\n        _aliases.append(clean(_canon))\n    _aliases = uniq(_aliases)\n    SKILL_PHRASES.append((_canon, [a for a in _aliases if a]))\n\n\ndef has_standalone_r(raw):\n    \"\"\"True if the language 'R' appears as its own item (not R&D, not 'R' inside a word).\"\"\"\n    t = sval(raw)\n    for sep in [\",\", \";\", \"/\", \"|\", \"\\u2022\", \"\\u00b7\", \"(\", \")\", \"\\n\", \"\\r\", \":\", \"*\",\n                \" and \", \" or \"]:\n        t = t.replace(sep, \"\\n\")\n    for line in t.split(\"\\n\"):\n        if line.strip(\" .-\\u2013\\u2014\\u2022\\t\") == \"R\":\n            return True\n    return False\n\n\ndef canon_skills(raw):\n    \"\"\"Map one free-text skill ('Microsoft Power BI Desktop') to canonical vocab names.\"\"\"\n    c = clean(raw)\n    if not c:\n        return []\n    p = \" \" + c + \" \"\n    found = []\n    for canon, aliases in SKILL_PHRASES:\n        for a in aliases:\n            if (\" \" + a + \" \") in p:\n                found.append(canon)\n                break\n    if c == \"r\" and \"r\" not in found:\n        found.append(\"r\")\n    return found\n\n\ndef detect_vocab_in_text(text):\n    \"\"\"Find vocabulary skills in free text, ordered by first appearance.\"\"\"\n    p = padded(text)\n    hits = []\n    for canon, aliases in SKILL_PHRASES:\n        best = -1\n        for a in aliases:\n            idx = p.find(\" \" + a + \" \")\n            if idx != -1 and (best == -1 or idx < best):\n                best = idx\n        if best != -1:\n            hits.append((best, canon))\n    if has_standalone_r(text):\n        hits.append((len(p), \"r\"))\n    hits.sort(key=lambda h: h[0])\n    return [h[1] for h in hits]\n\n\ndef normalize_skill_name(value):\n    raw = sval(value).lower().strip()\n    s = clean(value)          # lowercase, punctuation -> space (\"ms-excel\" -> \"ms excel\")\n\n    replacements = {\n        \"microsoft sql\": \"sql\",\n        \"ms sql\": \"sql\",\n        \"mssql\": \"sql\",\n        \"sql server\": \"sql\",\n        \"mysql\": \"mysql\",\n        \"postgres\": \"postgresql\",\n        \"postgres sql\": \"postgresql\",\n        \"postgre sql\": \"postgresql\",\n        \"powerbi\": \"power bi\",\n        \"power bi desktop\": \"power bi\",\n        \"ms power bi\": \"power bi\",\n        \"microsoft power bi\": \"power bi\",\n        \"tableau desktop\": \"tableau\",\n        \"ms excel\": \"excel\",\n        \"microsoft excel\": \"excel\",\n        \"google sheets\": \"google sheets\",\n        \"scikit learn\": \"scikit-learn\",\n        \"sklearn\": \"scikit-learn\",\n        \"machine-learning\": \"machine learning\",\n        \"data visualization\": \"data visualization\",\n        \"data visualisation\": \"data visualization\",\n    }\n\n    if s in replacements:\n        return replacements[s]\n    if raw in SKILL_VOCAB:    # already canonical, e.g. \"a/b testing\" (clean() would break the slash)\n        return raw\n    return s\n\n\ndef add_implied_skills(skills):\n    result = list(skills)\n    if not APPLY_IMPLIED_SKILLS:\n        return result\n    for skill in list(result):\n        for implied_skill in IMPLIED_SKILLS.get(skill, []):\n            if implied_skill not in result:\n                result.append(implied_skill)\n    return result\n\n\n# ================================================================\n# ROBUST CANDIDATE SKILL EXTRACTION\n# ================================================================\ndef extract_candidate_skills(resume):\n    found = []\n\n    if not isinstance(resume, dict):\n        return []\n\n    for field in CANDIDATE_SKILL_FIELDS:\n        value = resume.get(field)\n        # iterate the raw list so dict items like {\"name\": \"Python\"} survive\n        items = value if isinstance(value, (list, tuple)) else as_list(value)\n\n        for raw in items:\n            if isinstance(raw, dict):\n                raw = (\n                    raw.get(\"name\")\n                    or raw.get(\"skill\")\n                    or raw.get(\"technology\")\n                    or raw.get(\"tool\")\n                    or raw.get(\"value\")\n                    or \"\"\n                )\n\n            text = clean_text(raw)\n\n            if not text:\n                continue\n\n            canonical = canon_skills(text)\n\n            if canonical:\n                found.extend(canonical)\n            else:\n                # controlled-vocabulary detection inside longer phrases\n                detected = detect_vocab_in_text(text)\n\n                if detected:\n                    found.extend(detected)\n                else:\n                    found.append(normalize_skill_name(text))\n\n    # Remove duplicates while preserving order\n    result = []\n    seen = set()\n\n    for skill in found:\n        s = normalize_skill_name(skill)\n\n        if not s:\n            continue\n\n        if s not in seen:\n            seen.add(s)\n            result.append(s)\n\n    return add_implied_skills(result)\n\n\ndef job_required_skills(job):\n    req = []\n    for entry in as_list(job.get(\"skills\")):\n        found = canon_skills(entry)\n        if not found:\n            c = clean(entry)\n            if c and len(c.split()) <= 3 and len(c) <= 30:\n                found = [c]\n        for f in found:\n            if f not in req:\n                req.append(f)\n    text = sval(job.get(\"job_title\")) + \". \" + sval(job.get(\"description\"))\n    for f in detect_vocab_in_text(text):\n        if f not in req:\n            req.append(f)\n    return req\n\n\n# ---------------------------------------------------------------------\n# 5. EXPERIENCE\n# ---------------------------------------------------------------------\n# ================================================================\n# FALLBACK SKILL SCAN - used only when the listed skill fields give nothing\n#   1. look inside ANY field whose name hints at skills (core_competencies, key_skills, ...)\n#   2. else scan the whole resume text\n# Fallback keeps controlled-vocabulary skills only (no free-text phrases are invented).\n# ================================================================\nSKILL_KEY_HINTS = [\"skill\", \"tool\", \"tech\", \"language\", \"competenc\", \"software\",\n                   \"database\", \"framework\", \"librar\", \"platform\", \"stack\"]\n\n\ndef text_leaves(v):\n    \"\"\"All text values inside any nested dict/list.\"\"\"\n    if isinstance(v, dict):\n        return [x for k in v for x in text_leaves(v[k])]\n    if isinstance(v, (list, tuple)):\n        return [x for i in v for x in text_leaves(i)]\n    if v is None or isinstance(v, (bool, int, float)):\n        return []\n    t = sval(v)\n    return [t] if t else []\n\n\ndef hinted_leaves(v):\n    out = []\n    if isinstance(v, dict):\n        for k in v:\n            if any(h in clean(k) for h in SKILL_KEY_HINTS):\n                out += text_leaves(v[k])\n            else:\n                out += hinted_leaves(v[k])\n    elif isinstance(v, (list, tuple)):\n        for i in v:\n            out += hinted_leaves(i)\n    return out\n\n\ndef vocab_from_leaves(leaves):\n    found = []\n    for t in leaves:\n        for sk in canon_skills(t) + detect_vocab_in_text(t):\n            n = normalize_skill_name(sk)\n            if n and n not in found:\n                found.append(n)\n    return add_implied_skills(found)\n\n\ndef fallback_candidate_skills(resume):\n    found = vocab_from_leaves(hinted_leaves(resume))\n    if found:\n        return found, \"key_scan\"\n    found = vocab_from_leaves(text_leaves(resume))\n    if found:\n        return found, \"full_text_scan\"\n    return [], \"none\"\n\n\n# ================================================================\n# ROBUST CANDIDATE EXPERIENCE EXTRACTION   (unknown is NOT zero)\n# ================================================================\ndef parse_year_value(value):\n    if value is None or isinstance(value, bool):\n        return None\n\n    if isinstance(value, (int, float)):\n        return float(value) if value >= 0 else None\n\n    s = clean_text(value).lower()\n\n    if not s:\n        return None\n\n    if \"fresher\" in s or \"no experience\" in s:\n        return 0.0\n\n    # \"2 years\", \"2.5 years\", \"3+ years\", \"0-1 years\" -> largest number wins.\n    # \"1 year 6 months\" -> 1.5 (numbers followed by 'month' are months, not years).\n    years = []\n    months = 0.0\n    current = \"\"\n\n    for i, ch in enumerate(s + \" \"):\n        if ch.isdigit() or ch == \".\":\n            current += ch\n        elif current:\n            try:\n                n = float(current.strip(\".\"))\n            except Exception:\n                n = None\n            if n is not None:\n                if s[i:].strip().startswith(\"month\"):\n                    months += n\n                else:\n                    years.append(n)\n            current = \"\"\n\n    if years:\n        return round(max(years) + months / 12.0, 2)\n    if months:\n        return round(months / 12.0, 2)\n    return None\n\n\ndef extract_candidate_experience(resume):\n    if not isinstance(resume, dict):\n        return None\n\n    fields = [\n        \"experience_years\",\n        \"years_of_experience\",\n        \"total_experience_years\",\n        \"professional_experience_years\",\n    ]\n\n    for field in fields:\n        parsed = parse_year_value(resume.get(field))\n\n        if parsed is not None:\n            return parsed\n\n    # experience_level only when it is explicitly meaningful\n    level = clean_text(resume.get(\"experience_level\")).lower()\n\n    if level:\n        if \"fresher\" in level or \"entry\" in level:\n            return 0.0\n\n        if \"senior\" in level:\n            return None\n\n    return None\n\n\ndef exp_tokens(text):\n    s = sval(text).lower().replace(\"\\u2013\", \"-\").replace(\"\\u2014\", \"-\")\n    s = s.replace(\"+year\", \"+ year\")\n    out = []\n    for ch in s:\n        out.append(ch if (ch.isalnum() or ch in \"+-\") else \" \")\n    return \"\".join(out).split()\n\n\ndef parse_year_mentions(text):\n    \"\"\"Finds '3+ years', '2-4 years', '1 to 2 years' near the word 'experience'.\"\"\"\n    toks = exp_tokens(text)\n    found = []\n    for i in range(1, len(toks)):\n        if toks[i] not in (\"year\", \"years\", \"yr\", \"yrs\"):\n            continue\n        window = toks[max(0, i - 6): i + 7]\n        if not (\"experience\" in window or \"exp\" in window or \"experienced\" in window):\n            continue\n        prev = toks[i - 1]\n        lo = None\n        hi = None\n        if prev.endswith(\"+\") and prev[:-1].isdigit():\n            lo = int(prev[:-1])\n        elif \"-\" in prev:\n            parts = prev.split(\"-\")\n            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():\n                lo = int(parts[0])\n                hi = int(parts[1])\n        elif prev.isdigit():\n            lo = int(prev)\n            if i >= 3 and toks[i - 2] in (\"to\", \"-\") and toks[i - 3].isdigit():\n                lo = int(toks[i - 3])\n                hi = int(prev)\n        if lo is not None:\n            found.append((lo, hi))\n    return found\n\n\ndef map_level(text, table):\n    p = padded(text)\n    for phrase, lo, hi in table:\n        if (\" \" + phrase + \" \") in p:\n            return lo, hi\n    return None\n\n\ndef job_experience_requirement(job):\n    \"\"\"Returns (min_years, max_years, source). Priority: description years > fresher words > level > title.\"\"\"\n    desc = sval(job.get(\"description\"))\n    mentions = parse_year_mentions(desc)\n    if mentions:\n        best = mentions[0]\n        for m in mentions:\n            if m[0] > best[0]:\n                best = m\n        return best[0], best[1], \"description\"\n    pd = padded(desc)\n    for w in [\" fresher \", \" freshers \", \" entry level \", \" recent graduate \", \" recent graduates \"]:\n        if w in pd:\n            return 0, 1, \"description\"\n    lv = map_level(job.get(\"experience_level\"), EXP_LEVEL_MAP)\n    if lv is not None:\n        return lv[0], lv[1], \"experience_level\"\n    tl = map_level(job.get(\"job_title\"), TITLE_LEVEL_MAP)\n    if tl is not None:\n        return tl[0], tl[1], \"title\"\n    return None, None, \"none\"\n\n\ndef experience_pct(c, rmin, rmax):\n    if rmin is None:\n        return float(NEUTRAL[\"experience_unspecified\"])\n    if c >= rmin:\n        if rmax is not None and c > rmax + 2:\n            return 85.0                      # overqualified, mild penalty\n        if rmax is not None and rmin > 0 and c < rmax:\n            return 80.0                      # inside a range but below its top\n        return 100.0\n    gap = rmin - c\n    if gap <= 1:\n        return 60.0\n    if gap <= 2:\n        return 35.0\n    if gap <= 3:\n        return 15.0\n    return 0.0\n\n\n# ---------------------------------------------------------------------\n# 6. JOB TITLE / ROLE\n# ---------------------------------------------------------------------\ndef title_tokens(s):\n    c = \" \" + clean(s) + \" \"\n    c = c.replace(\" business intelligence \", \" bi \")\n    toks = [t for t in c.split() if t not in TITLE_FILLER]\n    return [TITLE_SYNONYMS.get(t, t) for t in toks]\n\n\ndef core_tokens(toks):\n    return uniq([t for t in toks if t not in SENIORITY_UP and t not in SENIORITY_DOWN])\n\n\ndef title_pct_single(target, job_title, cand_years):\n    tt = title_tokens(target)\n    jt = title_tokens(job_title)\n    tcore = core_tokens(tt)\n    jcore = core_tokens(jt)\n    if not tcore or not jcore:\n        return 0.0\n    if tt == jt:\n        return 100.0\n    inter = [t for t in tcore if t in jcore]\n    coverage = len(inter) / float(len(tcore))\n    precision = len(inter) / float(len(jcore))\n    score = 100.0 * (0.6 * coverage + 0.4 * precision)\n    t_dom = [t for t in tcore if t not in ROLE_TYPE_WORDS]\n    j_dom = [t for t in jcore if t not in ROLE_TYPE_WORDS]\n    if t_dom and not [t for t in t_dom if t in j_dom]:\n        score = min(score, 35.0)             # same role type, different domain\n    if score >= 95.0:\n        score = 95.0                         # same core role, different qualifiers\n    up = [t for t in jt if t in SENIORITY_UP]\n    down = [t for t in jt if t in [\"junior\", \"jr\", \"intern\", \"internship\", \"trainee\", \"fresher\"]]\n    if up and cand_years is not None and cand_years < 3:\n        score -= 30.0\n    if down and cand_years is not None and cand_years >= 5:\n        score -= 15.0\n    return clamp(score)\n\n\ndef title_pct(targets, job_title, cand_years):\n    best = 0.0\n    for t in targets:\n        s = title_pct_single(t, job_title, cand_years)\n        if s > best:\n            best = s\n    return best\n\n\n# ---------------------------------------------------------------------\n# 7. LOCATION\n# ---------------------------------------------------------------------\ndef loc_norm(s):\n    c = \" \" + clean(s) + \" \"\n    for a in CITY_SYNONYMS:\n        c = c.replace(\" \" + a + \" \", \" \" + CITY_SYNONYMS[a] + \" \")\n    toks = [t for t in c.split() if t not in LOC_FILLER]\n    return \" \" + \" \".join(toks) + \" \"\n\n\ndef split_places(values):\n    out = []\n    for v in values:\n        t = sval(v)\n        for sep in [\"/\", \"|\", \";\"]:\n            t = t.replace(sep, \",\")\n        for part in t.split(\",\"):\n            n = loc_norm(part).strip()\n            if n and n not in out:\n                out.append(n)\n    return out\n\n\ndef job_is_remote(job):\n    text = padded(sval(job.get(\"location\")) + \" \" + sval(job.get(\"job_title\")))\n    if \" remote \" in text:\n        return True\n    d = padded(job.get(\"description\"))\n    for w in [\" fully remote \", \" work from home \", \" 100 remote \", \" remote position \", \" remote role \"]:\n        if w in d:\n            return True\n    return False\n\n\ndef location_score(prefs, job):\n    jl = sval(job.get(\"location\"))\n    if not jl or not prefs:\n        return float(NEUTRAL[\"location_unknown\"]), \"unknown\"\n    jn = loc_norm(jl)\n    remote = job_is_remote(job)\n    best = 0.0\n    label = \"mismatch\"\n    for p in prefs:\n        cand = 0.0\n        lab = \"\"\n        if p == \"remote\":\n            if remote:\n                cand, lab = 100.0, \"remote_match\"\n        elif p in COUNTRIES:\n            if jn.strip() == p:\n                cand, lab = 100.0, \"country_match\"\n            elif (\" \" + p + \" \") in jn:\n                cand, lab = 60.0, \"country_level_match\"\n        else:\n            if (\" \" + p + \" \") in jn:\n                cand, lab = 100.0, \"city_match\"\n            elif jn.strip() in COUNTRIES:\n                cand, lab = 40.0, \"country_only_job_location\"\n        if cand > best:\n            best, label = cand, lab\n    if best == 0.0 and remote:\n        best, label = 70.0, \"remote_available\"\n    return best, label\n\n\n# ---------------------------------------------------------------------\n# 8. JOB TYPE\n# ---------------------------------------------------------------------\ndef canon_job_types(text):\n    p = padded(text)\n    out = []\n    for canon, aliases in JOB_TYPE_ALIASES:\n        for a in aliases:\n            if (\" \" + a + \" \") in p:\n                out.append(canon)\n                break\n    return out\n\n\ndef job_type_score(cand_types, job):\n    jt = canon_job_types(job.get(\"job_type\"))\n    if not jt:\n        jt = canon_job_types(job.get(\"job_title\"))   # e.g. \"Data Analyst Intern\"\n        jt = [t for t in jt if t == \"internship\"]\n    if not cand_types:\n        return float(NEUTRAL[\"job_type_no_pref\"]), \"no_preference\"\n    if not jt:\n        return float(NEUTRAL[\"job_type_unknown\"]), \"unknown\"\n    for t in jt:\n        if t in cand_types:\n            return 100.0, \"match\"\n    return 20.0, \"mismatch\"\n\n\n# ---------------------------------------------------------------------\n# 9. EDUCATION\n# ---------------------------------------------------------------------\ndef find_levels(p, table):\n    found = []\n    for lvl, phrases in table:\n        for ph in phrases:\n            needle = \" \" + ph + \" \"\n            idx = p.find(needle)\n            while idx != -1:\n                if not (ph == \"master\" and p[idx: idx + 13] == \" master data \"):\n                    found.append((lvl, idx, ph))\n                idx = p.find(needle, idx + 1)\n    return found\n\n\ndef is_preferred(p, idx, ph):\n    start = idx + len(ph) + 2\n    after = p[start: start + 40] + \" \"\n    for w in PREFERRED_WORDS:\n        if w in after:\n            return True\n    return False\n\n\ndef candidate_education_level(edu_text):\n    p = padded(edu_text)\n    levels = [f[0] for f in find_levels(p, CAND_EDU_LEVELS)]\n    return max(levels) if levels else 0\n\n\ndef job_education_requirement(job):\n    p = padded(job.get(\"description\"))\n    found = find_levels(p, JOB_EDU_LEVELS)\n    required = [f[0] for f in found if not is_preferred(p, f[1], f[2])]\n    req_level = min(required) if required else None\n    anchors = [f[1] for f in found]\n    idx = p.find(\" degree \")\n    while idx != -1:\n        anchors.append(idx)\n        idx = p.find(\" degree \", idx + 1)\n    if req_level is None and not found and (\" degree in \" in p):\n        req_level = 2\n    fields = []\n    for a in anchors:\n        seg = p[a: a + 160]\n        for f in JOB_EDU_FIELDS:\n            if (\" \" + f + \" \") in seg and f not in fields:\n                fields.append(f)\n    if req_level is None:\n        fields = []\n    return req_level, fields\n\n\ndef education_score(edu_text, job):\n    req_level, fields = job_education_requirement(job)\n    cand_level = candidate_education_level(edu_text)\n    cand_clean = clean(edu_text)\n    detail = {\n        \"candidate_level\": EDU_LEVEL_NAMES.get(cand_level, \"unknown\"),\n        \"required_level\": EDU_LEVEL_NAMES.get(req_level, \"not specified\") if req_level else \"not specified\",\n        \"required_fields\": fields,\n    }\n    if req_level is None:\n        return float(NEUTRAL[\"education_unspecified\"]), \"not_specified\", detail\n    if cand_level == 0:\n        return float(NEUTRAL[\"education_candidate_unknown\"]), \"unknown\", detail\n    if cand_level >= req_level:\n        level_pct = 100.0\n    elif req_level - cand_level == 1:\n        level_pct = 40.0\n    else:\n        level_pct = 20.0\n    if not fields:\n        field_pct = 100.0\n    else:\n        hit = False\n        for f in fields:\n            if f in cand_clean:\n                hit = True\n            for w in f.split(\" \"):\n                if w not in (\"science\", \"engineering\", \"systems\", \"technology\", \"information\") and w in cand_clean:\n                    hit = True\n        if hit:\n            field_pct = 100.0\n        else:\n            related = False\n            for r in CAND_DATA_RELATED:\n                if r in cand_clean:\n                    related = True\n            field_pct = 80.0 if related else 40.0\n    pct = 0.7 * level_pct + 0.3 * field_pct\n    if cand_level < req_level:\n        label = \"gap\"\n    elif pct >= 85.0:\n        label = \"meets\"\n    else:\n        label = \"partial\"\n    return pct, label, detail\n\n\n# ---------------------------------------------------------------------\n# 10. SUMMARY (deterministic text built from the numbers)\n# ---------------------------------------------------------------------\ndef build_summary(r):\n    pos = []\n    gaps = []\n    sk = r[\"skills\"]\n    n_req = len(sk[\"required\"])\n    n_m = len(sk[\"matched\"])\n    if n_req == 0:\n        pos.append(\"no explicit skills listed to compare\")\n    else:\n        p = sk[\"match_percentage\"]\n        if p >= 75:\n            pos.append(\"strong skills match (\" + str(n_m) + \"/\" + str(n_req) + \")\")\n        elif p >= 50:\n            pos.append(\"moderate skills match (\" + str(n_m) + \"/\" + str(n_req) + \")\")\n        else:\n            pos.append(\"limited skills match (\" + str(n_m) + \"/\" + str(n_req) + \")\")\n        if sk[\"missing\"]:\n            shown = sk[\"missing\"][:3]\n            extra = len(sk[\"missing\"]) - len(shown)\n            txt = \"missing \" + \", \".join(shown)\n            if extra > 0:\n                txt += \" +\" + str(extra) + \" more\"\n            gaps.append(txt)\n    tp = r[\"match_percentages\"][\"job_title\"]\n    if tp >= 80:\n        pos.append(\"close role alignment\")\n    elif tp >= 50:\n        pos.append(\"partial role alignment\")\n    elif r[\"job_title\"]:\n        gaps.append(\"role differs from your target roles\")\n    ll = r[\"location_match\"]\n    if ll in (\"city_match\", \"country_match\", \"remote_match\"):\n        pos.append(\"good location alignment\")\n    elif ll in (\"country_level_match\", \"remote_available\", \"country_only_job_location\"):\n        pos.append(\"acceptable location fit\")\n    elif ll == \"mismatch\":\n        gaps.append(\"location differs (\" + (r[\"location\"] or \"n/a\") + \")\")\n    ex = r[\"experience\"]\n    if ex[\"required_years\"] is not None:\n        if r[\"match_percentages\"][\"experience\"] >= 80:\n            pos.append(\"experience requirement met\")\n        elif r[\"match_percentages\"][\"experience\"] < 60:\n            req = str(int(ex[\"required_years\"])) + \"+\"\n            if ex[\"candidate_years\"] is None:\n                gaps.append(\"asks for \" + req + \" years experience (your experience was not found on the resume)\")\n            else:\n                gaps.append(\"asks for \" + req + \" years experience (candidate has \"\n                            + str(int(ex[\"candidate_years\"])) + \")\")\n    if r[\"education_match\"] == \"gap\":\n        gaps.append(\"education requirement above current degree\")\n    if r[\"job_type_match\"] == \"mismatch\":\n        gaps.append(\"job type differs from preference\")\n    head = \", \".join(pos[:3])\n    if len(pos) > 3:\n        head += \", \" + \", \".join(pos[3:])\n    head = head[:1].upper() + head[1:] if head else \"Match calculated\"\n    tail = (\"Gaps: \" + \"; \".join(gaps) + \".\") if gaps else \"No major gaps identified.\"\n    return head + \". \" + tail\n\n\ndef tier(score):\n    if score >= 80:\n        return \"Excellent\"\n    if score >= 65:\n        return \"Good\"\n    if score >= 50:\n        return \"Fair\"\n    return \"Low\"\n\n\n# ---------------------------------------------------------------------\n# 11. RESUME PROFILE (built once)\n# ---------------------------------------------------------------------\ndef build_profile(resume):\n    r = resume if isinstance(resume, dict) else {}\n\n    skills = extract_candidate_skills(r)\n    skill_source = \"listed_fields\"\n    if not skills:\n        skills, skill_source = fallback_candidate_skills(r)\n\n    targets = []\n    for value in as_list(r.get(\"target_job_roles\")):\n        text = clean_text(value)\n        if text:\n            targets.append(text)\n\n    preferred_locations = []\n    for value in as_list(r.get(\"preferred_locations\")):\n        text = clean_text(value)\n        if text:\n            preferred_locations.append(text)\n\n    if not preferred_locations:\n        location = clean_text(r.get(\"location\"))\n        if location:\n            preferred_locations.append(location)\n\n    preferred_job_types = []\n    for value in as_list(r.get(\"preferred_job_type\")):\n        text = clean_text(value)\n        if text:\n            preferred_job_types.append(text)\n\n    experience_years = extract_candidate_experience(r)\n\n    return {\n        \"available\": bool(r),\n        \"name\": sval(r.get(\"candidate_name\")),\n        \"skills\": skills,\n        \"targets\": targets,\n        \"locations\": preferred_locations,\n        # the scorers below need these normalized forms:\n        \"places\": split_places(preferred_locations),\n        \"job_types\": uniq([t for v in preferred_job_types for t in canon_job_types(v)]),\n        \"edu_text\": flatten_text(r.get(\"education\")) + \" ; \" + flatten_text(r.get(\"certifications\")),\n        \"experience_years\": experience_years,\n        \"experience_known\": experience_years is not None,\n        \"skill_source\": skill_source,\n        \"resume_keys\": [str(k) for k in r.keys()],\n    }\n\n\n# ---------------------------------------------------------------------\n# 12. SCORE ONE JOB\n# ---------------------------------------------------------------------\ndef score_job(job, P):\n    title = sval(job.get(\"job_title\"))\n    desc = sval(job.get(\"description\"))\n\n    # skills\n    candidate_skill_set = set(\n        normalize_skill_name(s)\n        for s in P.get(\"skills\", [])\n        if clean_text(s)\n    )\n\n    required = [\n        normalize_skill_name(s)\n        for s in job_required_skills(job)\n        if clean_text(s)\n    ]\n    required = list(dict.fromkeys(required))          # remove duplicates, keep order\n\n    matched = [s for s in required if s in candidate_skill_set]\n    missing = [s for s in required if s not in candidate_skill_set]\n    if required:\n        skills_pct = round(100.0 * len(matched) / len(required), 1)\n    else:\n        skills_pct = float(NEUTRAL[\"skills_unknown\"])\n\n    # experience\n    rmin, rmax, rsrc = job_experience_requirement(job)\n    candidate_years = P.get(\"experience_years\")\n    if candidate_years is None:\n        exp_pct = 50.0                    # unknown experience is NOT zero experience\n    else:\n        exp_pct = experience_pct(candidate_years, rmin, rmax)\n\n    # title\n    if P[\"targets\"]:\n        t_pct = title_pct(P[\"targets\"], title, candidate_years)\n    else:\n        t_pct = float(NEUTRAL[\"title_no_target\"])\n\n    # location / job type / education\n    loc_pct, loc_label = location_score(P[\"places\"], job)\n    jt_pct, jt_label = job_type_score(P[\"job_types\"], job)\n    edu_pct, edu_label, edu_detail = education_score(P[\"edu_text\"], job)\n\n    pcts = {\n        \"skills\": round(skills_pct, 1),\n        \"experience\": round(exp_pct, 1),\n        \"job_title\": round(t_pct, 1),\n        \"location\": round(loc_pct, 1),\n        \"job_type\": round(jt_pct, 1),\n        \"education\": round(edu_pct, 1),\n    }\n    breakdown = {}\n    total = 0.0\n    for k in WEIGHTS:\n        breakdown[k] = round(pcts[k] * WEIGHTS[k] / 100.0, 1)\n        total += breakdown[k]\n    score = round(clamp(total), 1)\n\n    dq = dict(plain(job.get(\"data_quality\")) or {}) if isinstance(plain(job.get(\"data_quality\")), dict) else {}\n    dq.update({\n        \"resume_available\": P[\"available\"],\n        \"candidate_years_assumed\": not P[\"experience_known\"],\n        \"candidate_experience_known\": P[\"experience_known\"],\n        \"skills_detectable\": len(required) > 0,\n        \"experience_requirement_detected\": rmin is not None,\n        \"education_requirement_detected\": edu_label != \"not_specified\",\n        \"description_available\": len(desc) > 0,\n        \"location_available\": len(sval(job.get(\"location\"))) > 0,\n        \"target_roles_available\": len(P[\"targets\"]) > 0,\n        \"job_type_available\": len(sval(job.get(\"job_type\"))) > 0,\n    })\n\n    result = {\n        \"job_id\": sval(job.get(\"job_id\")),\n        \"job_title\": title,\n        \"company\": sval(job.get(\"company\")),\n        \"location\": sval(job.get(\"location\")),\n        \"job_type\": sval(job.get(\"job_type\")),\n        \"experience_level\": sval(job.get(\"experience_level\")),\n        \"posted_date\": sval(job.get(\"posted_date\")),\n        \"job_url\": sval(job.get(\"job_url\")),\n        \"match_score\": score,\n        \"match_tier\": tier(score),\n        \"score_breakdown\": breakdown,\n        \"match_percentages\": pcts,\n        \"skills\": {\n            \"required\": [pretty(s) for s in required],\n            \"matched\": [pretty(s) for s in matched],\n            \"missing\": [pretty(s) for s in missing],\n            \"required_count\": len(required),\n            \"matched_count\": len(matched),\n            \"missing_count\": len(missing),\n            \"match_percentage\": pcts[\"skills\"],\n        },\n        \"experience\": {\n            \"candidate_years\": candidate_years,\n            \"experience_assumed\": candidate_years is None,\n            \"required_years\": rmin,\n            \"required_max_years\": rmax,\n            \"required_source\": rsrc,\n            \"match_percentage\": pcts[\"experience\"],\n        },\n        \"location_match\": loc_label,\n        \"job_type_match\": jt_label,\n        \"education_match\": edu_label,\n        \"education_detail\": edu_detail,\n        \"match_summary\": \"\",\n        \"data_quality\": dq,\n        \"matching_debug\": {\n            \"resume_available\": P.get(\"available\"),\n            \"candidate_skills\": P.get(\"skills\", []),\n            \"candidate_skill_count\": len(P.get(\"skills\", [])),\n            \"skill_source\": P.get(\"skill_source\"),\n            \"resume_keys\": P.get(\"resume_keys\", []),\n            \"target_roles\": P.get(\"targets\", []),\n            \"candidate_experience_years\": P.get(\"experience_years\"),\n            \"candidate_experience_known\": P.get(\"experience_known\"),\n            \"required_skills\": required,\n            \"matched_skills\": matched,\n            \"missing_skills\": missing,\n        },\n        \"engine_version\": ENGINE_VERSION,\n    }\n    result[\"match_summary\"] = build_summary(result)\n    return result\n\n\n# ---------------------------------------------------------------------\n# 13. MAIN\n# ---------------------------------------------------------------------\njobs = []\nfor _it in _items:\n    try:\n        _j = plain(_it[\"json\"])\n    except Exception:\n        _j = {}\n    jobs.append(_j if isinstance(_j, dict) else {})\n\n_resume = {}\nfor _j in jobs:\n    _r = plain(_j.get(\"resume\"))\n    if isinstance(_r, dict) and len(_r) > 0:\n        _resume = _r\n        break\n\nPROFILE = build_profile(_resume)\n\nresults = []\nfor _j in jobs:\n    try:\n        results.append(score_job(_j, PROFILE))\n    except Exception as _e:\n        results.append({\n            \"job_id\": sval(_j.get(\"job_id\")),\n            \"job_title\": sval(_j.get(\"job_title\")),\n            \"company\": sval(_j.get(\"company\")),\n            \"location\": sval(_j.get(\"location\")),\n            \"job_url\": sval(_j.get(\"job_url\")),\n            \"match_score\": 0,\n            \"match_summary\": \"Could not score this job.\",\n            \"data_quality\": {\"scoring_error\": str(_e)},\n            \"engine_version\": ENGINE_VERSION,\n        })\n\nreturn [{\"json\": r} for r in results]"
+      },
+      "id": "759f7515-f57d-400e-82e2-842fdb94bf9f",
+      "name": "Calculate Job Match",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        -240
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "# VALIDATE MATCH RESULTS - n8n Python Code node, \"Run Once for All Items\", no imports.\n# Place between \"Calculate Job Match\" and \"Rank & Select Top 5\".\n#  - Resume-level problems (no resume / no candidate skills) affect EVERY job, so the node\n#    stops the workflow with a clear error instead of emailing a bad report.\n#  - Job-level problems mark only that job: scoring_status = \"ERROR\" + scoring_error text.\n#    data_quality.scoring_error is also set, which the Rank node already uses to drop the job.\nSTOP_ON_FATAL = True    # False = don't raise; mark every job ERROR instead\nTOL = 0.15              # allowed rounding difference when checking the score breakdown sum\nDIMS = [\"skills\", \"experience\", \"job_title\", \"location\", \"job_type\", \"education\"]\nBREAKDOWN_DIMS = DIMS + [\"relevance\", \"recency\"]\n\ndct = lambda v: v if isinstance(v, dict) else {}\nnum = lambda v: float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None\nok100 = lambda v: num(v) is not None and 0 <= num(v) <= 100\n\nrows = [dict(i[\"json\"]) for i in _items if isinstance(i[\"json\"], dict)]\n\n# ---- resume-level checks (same for every job) --------------------------------\ndbg = next((r[\"matching_debug\"] for r in rows if isinstance(r.get(\"matching_debug\"), dict)), None)\nfatal = None\nif dbg is None:\n    fatal = \"No job was scored (matching_debug missing) - check the Calculate Job Match node\"\nelif not dbg.get(\"resume_available\"):\n    fatal = \"Resume unavailable - check the Attach Resume node and the AI Resume Parser output\"\nelif not num(dbg.get(\"candidate_skill_count\")):\n    fatal = (\"Candidate skill profile unavailable - no skills were extracted from the resume. \"\n             \"Resume fields received: \" + \", \".join(dbg.get(\"resume_keys\") or [\"(none)\"]))\nif fatal and STOP_ON_FATAL:\n    raise ValueError(\"VALIDATION FAILED: \" + fatal)\n\n# ---- job-level checks ---------------------------------------------------------\ndef check(r):\n    e = []\n    if dct(r.get(\"data_quality\")).get(\"scoring_error\"):\n        return [\"matcher failed on this job: \" + str(r[\"data_quality\"][\"scoring_error\"])]\n    if not str(r.get(\"job_title\") or \"\").strip():\n        e.append(\"job title missing\")\n    if not ok100(r.get(\"match_score\")):\n        e.append(\"match_score outside 0-100\")\n    pct, bd = dct(r.get(\"match_percentages\")), dct(r.get(\"score_breakdown\"))\n    for d in DIMS:\n        if not ok100(pct.get(d)):\n            e.append(d + \" percentage missing or outside 0-100\")\n    for d in BREAKDOWN_DIMS:\n        if num(bd.get(d)) is None:\n            e.append(d + \" score_breakdown missing\")\n    if not [x for x in e if \"percentage\" in x or \"breakdown\" in x or \"match_score\" in x]:\n        if abs(sum(num(bd[d]) for d in BREAKDOWN_DIMS) - num(r[\"match_score\"])) > TOL:\n            e.append(\"score_breakdown does not add up to match_score\")\n    sk = dct(r.get(\"skills\"))\n    n_req, n_m, n_x = len(sk.get(\"required\") or []), len(sk.get(\"matched\") or []), len(sk.get(\"missing\") or [])\n    if n_m + n_x != n_req:\n        e.append(\"matched (%d) + missing (%d) != required (%d)\" % (n_m, n_x, n_req))\n    return e\n\nout = []\nfor r in rows:\n    errs = ([fatal] if fatal else []) + check(r)\n    r[\"scoring_status\"] = \"ERROR\" if errs else \"OK\"\n    r[\"scoring_error\"] = \"; \".join(errs)\n    r[\"validation_errors\"] = errs\n    if errs:\n        r[\"data_quality\"] = dict(dct(r.get(\"data_quality\")), scoring_error=r[\"scoring_error\"])\n    out.append(r)\n\nif out and all(r[\"scoring_status\"] == \"ERROR\" for r in out) and STOP_ON_FATAL:\n    raise ValueError(\"VALIDATION FAILED: every job failed validation. First error: \" + out[0][\"scoring_error\"])\n\nreturn [{\"json\": r} for r in out]\n"
+      },
+      "id": "b42de466-34a7-4b5c-b191-2d35064599c4",
+      "name": "Data Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "def num(v):\n    try:return float(v)\n    except:return 0\ndef arr(v):return v if isinstance(v,list) else []\nvalid=[]\nfor i in _items:\n    j=i.get(\"json\",{})\n    if j.get(\"scoring_status\")==\"ERROR\" or (j.get(\"data_quality\") or {}).get(\"scoring_error\"):continue\n    valid.append(j)\nbase={\"kpi_version\":\"1.0\",\"total_jobs\":len(valid),\"average_match_score\":0,\"best_match_score\":0,\"worst_match_score\":0,\"average_skills_match\":0,\"average_experience_match\":0,\"average_role_match\":0,\"average_location_match\":0,\"average_job_type_match\":0,\"average_education_match\":0,\"average_skill_coverage\":0,\"tier_counts\":{},\"total_required_skills\":0,\"total_matched_skills\":0,\"total_missing_skills\":0,\"top_missing_skills\":[]}\nif not valid:return [{\"json\":base}]\nscores=[num(j.get(\"match_score\")) for j in valid]; mpkeys=[\"skills\",\"experience\",\"job_title\",\"location\",\"job_type\",\"education\"]\nav={k:sum(num((j.get(\"match_percentages\") or {}).get(k)) for j in valid)/len(valid) for k in mpkeys}\nmissing={}; req=mat=mis=0\nfor j in valid:\n    s=j.get(\"skills\") or {}\n    if isinstance(s,dict):\n        r=s.get(\"required_count\",len(arr(s.get(\"required\"))));m=s.get(\"matched_count\",len(arr(s.get(\"matched\"))));x=s.get(\"missing_count\",len(arr(s.get(\"missing\"))));miss=arr(s.get(\"missing\"))\n    else:r=m=x=0;miss=[]\n    req+=r;mat+=m;mis+=x\n    for skill in miss:missing[str(skill)]=missing.get(str(skill),0)+1\n    tier=str(j.get(\"match_tier\") or \"Unclassified\");base[\"tier_counts\"][tier]=base[\"tier_counts\"].get(tier,0)+1\nbase.update({\"average_match_score\":round(sum(scores)/len(scores),2),\"best_match_score\":round(max(scores),2),\"worst_match_score\":round(min(scores),2),\"average_skills_match\":round(av[\"skills\"],2),\"average_experience_match\":round(av[\"experience\"],2),\"average_role_match\":round(av[\"job_title\"],2),\"average_location_match\":round(av[\"location\"],2),\"average_job_type_match\":round(av[\"job_type\"],2),\"average_education_match\":round(av[\"education\"],2),\"average_skill_coverage\":round(mat/req*100,2) if req else 0,\"total_required_skills\":req,\"total_matched_skills\":mat,\"total_missing_skills\":mis,\"top_missing_skills\":[{\"skill\":k,\"count\":v} for k,v in sorted(missing.items(),key=lambda x:(-x[1],x[0].lower()))[:10]]})\nreturn [{\"json\":base}]"
+      },
+      "id": "873566b2-d139-4cad-bab9-e59b7a25dcf0",
+      "name": "KPI Generation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        -240
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {},
+      "id": "a4266403-0bf8-4b0a-9628-d668fc94c19e",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2272,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "items = _items\n\nkpi = None\nchart_data = None\n\nfor item in items:\n    data = item.get(\"json\", {})\n\n    if data.get(\"kpi_version\"):\n        kpi = data\n\n    elif data.get(\"chart_data_version\"):\n        chart_data = data\n\nif kpi is None:\n    raise Exception(\"KPI data not found in Merge output\")\n\nif chart_data is None:\n    raise Exception(\"Chart data not found in Merge output\")\n\n# Build one unified report object.\n# Keep chart_data fields at the top level so the existing\n# Job Match Report HTML can continue using them directly.\n\nreport = {\n    \"report_version\": \"1.0\",\n\n    # KPI summary\n    \"kpi\": kpi,\n\n    # Report/chart data\n    \"chart_data_version\": chart_data.get(\"chart_data_version\"),\n    \"generated_from\": chart_data.get(\"generated_from\"),\n    \"job_count\": chart_data.get(\"job_count\"),\n\n    \"summary\": chart_data.get(\"summary\", {}),\n    \"charts\": chart_data.get(\"charts\", {}),\n    \"jobs\": chart_data.get(\"jobs\", []),\n\n    # Useful top-level KPI values\n    \"average_match_score\": kpi.get(\"average_match_score\"),\n    \"best_match_score\": kpi.get(\"best_match_score\"),\n    \"worst_match_score\": kpi.get(\"worst_match_score\"),\n    \"average_skills_match\": kpi.get(\"average_skills_match\"),\n    \"average_experience_match\": kpi.get(\"average_experience_match\"),\n    \"average_role_match\": kpi.get(\"average_role_match\"),\n    \"average_location_match\": kpi.get(\"average_location_match\"),\n    \"average_job_type_match\": kpi.get(\"average_job_type_match\"),\n    \"average_education_match\": kpi.get(\"average_education_match\"),\n    \"average_skill_coverage\": kpi.get(\"average_skill_coverage\"),\n\n    \"tier_counts\": kpi.get(\"tier_counts\", {}),\n\n    \"total_required_skills\": kpi.get(\"total_required_skills\", 0),\n    \"total_matched_skills\": kpi.get(\"total_matched_skills\", 0),\n    \"total_missing_skills\": kpi.get(\"total_missing_skills\", 0),\n\n    \"top_missing_skills\": kpi.get(\"top_missing_skills\", [])\n}\n\nreturn [{\"json\": report}]"
+      },
+      "id": "48d61d17-c00f-4a27-a321-86523cf508a8",
+      "name": "Report Assembly",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2544,
+        -224
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "r = _items[0].get(\"json\", {}) if _items else {}\nc = r.get(\"charts\", {})\n\ndef cfg(k, chart_type, title, extra=None):\n    if extra is None:\n        extra = {}\n\n    x = c.get(k, {})\n\n    data = {\n        \"labels\": x.get(\"labels\", [])\n    }\n\n    if k == \"match_score\":\n        data[\"datasets\"] = [{\n            \"label\": \"Match Score\",\n            \"data\": x.get(\"values\", [])\n        }]\n\n    elif k == \"score_breakdown\":\n        data[\"datasets\"] = x.get(\"datasets\", [])\n\n    elif k == \"skills_match\":\n        data[\"datasets\"] = [\n            {\n                \"label\": \"Required\",\n                \"data\": x.get(\"required\", [])\n            },\n            {\n                \"label\": \"Matched\",\n                \"data\": x.get(\"matched\", [])\n            },\n            {\n                \"label\": \"Missing\",\n                \"data\": x.get(\"missing\", [])\n            }\n        ]\n\n    else:\n        dataset = {\n            \"data\": x.get(\"values\", [])\n        }\n\n        if k == \"skills_coverage\":\n            dataset[\"label\"] = \"Skill Coverage Jobs\"\n\n        data[\"datasets\"] = [dataset]\n      \n    options = {\n        \"plugins\": {\n            \"title\": {\n                \"display\": True,\n                \"text\": title\n            }\n        }\n    }\n\n    for key, value in extra.items():\n        options[key] = value\n\n    return {\n        \"type\": chart_type,\n        \"data\": data,\n        \"options\": options\n    }\n\n\ndef to_json(v):\n    if v is None:\n        return \"null\"\n    if v is True:\n        return \"true\"\n    if v is False:\n        return \"false\"\n    if isinstance(v, (int, float)):\n        return repr(v)\n    if isinstance(v, str):\n        s = v.replace(chr(92), chr(92) + chr(92)).replace(chr(34), chr(92) + chr(34)).replace(chr(10), \" \").replace(chr(13), \" \").replace(chr(9), \" \")\n        return '\"' + s + '\"'\n    if isinstance(v, dict):\n        return \"{\" + \",\".join(to_json(str(k)) + \":\" + to_json(val) for k, val in v.items()) + \"}\"\n    if isinstance(v, (list, tuple)):\n        return \"[\" + \",\".join(to_json(x) for x in v) + \"]\"\n    return to_json(str(v))\n\n\nSAFE_CHARS = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~\"\n\ndef url_encode(s):\n    out_chars = []\n    for b in s.encode(\"utf-8\"):\n        ch = chr(b)\n        if ch in SAFE_CHARS:\n            out_chars.append(ch)\n        else:\n            out_chars.append(\"%\" + format(b, \"02X\"))\n    return \"\".join(out_chars)\n\n\ndef quickchart(chart_config, width, height):\n    chart_json = url_encode(to_json(chart_config))\n\n    return (\n        \"https://quickchart.io/chart\"\n        \"?width=\" + str(width) +\n        \"&height=\" + str(height) +\n        \"&backgroundColor=white\"\n        \"&format=png\"\n        \"&c=\" + chart_json\n    )\n\n\nout = dict(r)\n\nout[\"quickchart\"] = {\n    \"match_score\": quickchart(\n        cfg(\n            \"match_score\",\n            \"bar\",\n            \"Match Score by Job\",\n            {\n                \"scales\": {\n                    \"y\": {\n                        \"beginAtZero\": True,\n                        \"max\": 100\n                    }\n                }\n            }\n        ),\n        900,\n        420\n    ),\n\n    \"score_breakdown\": quickchart(\n        cfg(\n            \"score_breakdown\",\n            \"bar\",\n            \"Match Score Breakdown\",\n            {\n                \"scales\": {\n                    \"x\": {\"stacked\": True},\n                    \"y\": {\n                        \"stacked\": True,\n                        \"beginAtZero\": True,\n                        \"max\": 100\n                    }\n                }\n            }\n        ),\n        900,\n        450\n    ),\n\n    \"skills_match\": quickchart(\n        cfg(\n            \"skills_match\",\n            \"bar\",\n            \"Required vs Matched Skills\"\n        ),\n        900,\n        450\n    ),\n\n    \"skills_coverage\": quickchart(\n        cfg(\n            \"skills_coverage\",\n            \"bar\",\n            \"Skill Coverage\",\n            {\n                \"scales\": {\n                    \"y\": {\n                        \"beginAtZero\": True,\n                        \"max\": 100\n                    }\n                }\n            }\n        ),\n        900,\n        420\n    ),\n\n    \"tier_distribution\": quickchart(\n        cfg(\n            \"tier_distribution\",\n            \"doughnut\",\n            \"Match Tier Distribution\"\n        ),\n        700,\n        400\n    ),\n\n    \"missing_skills\": quickchart(\n        cfg(\n            \"missing_skills\",\n            \"bar\",\n            \"Most Common Missing Skills\",\n            {\n                \"indexAxis\": \"y\",\n                \"scales\": {\n                    \"x\": {\n                        \"beginAtZero\": True,\n                        \"title\": {\n                            \"display\": True,\n                            \"text\": \"Number of Jobs\"\n                        }\n                    }\n                }\n            }\n        ),\n        900,\n        450\n    )\n}\n\nout[\"quickchart_version\"] = \"1.0\"\n\nreturn [{\"json\": out}]"
+      },
+      "id": "388724c3-d7f7-4c25-b7d0-cc3f1734a790",
+      "name": "QuickChart Generator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2752,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "d=_items[0].get(\"json\",{}) if _items else {}\nk=d.get(\"kpi\",{}); jobs=d.get(\"jobs\",[]); q=d.get(\"quickchart\",{})\ndef esc(v,fallback=\"—\"):\n    if v is None:return fallback\n    s=str(v).strip()\n    if not s:return fallback\n    return s.replace(\"&\",\"&amp;\").replace(\"<\",\"&lt;\").replace(\">\",\"&gt;\").replace('\"',\"&quot;\").replace(\"'\",\"&#39;\")\ndef safe_url(v):\n    s=str(v or \"\").strip()\n    return s if s.startswith(\"https://\") or s.startswith(\"http://\") else \"\"\ndef num(v):\n    try:\n        n=float(v)\n        return 0 if n!=n or n==float(\"inf\") or n==float(\"-inf\") else round(n,1)\n    except:return 0\ndef chart(url,alt):\n    u=safe_url(url)\n    return \"\" if not u else '<div style=\"margin:20px 0;\"><img src=\"'+esc(u)+'\" alt=\"'+esc(alt)+'\" style=\"display:block;width:100%;max-width:900px;height:auto;border:1px solid #e2e8f0;border-radius:8px;\"></div>'\n\ncards=[]\nfor i,j in enumerate(jobs):\n    s=j.get(\"skills\",{}) or {}; missing=s.get(\"missing\",[]) or []; mh=\"\"; u=safe_url(j.get(\"job_url\")); bh=\"\"; rank=j.get(\"rank\") or i+1\n    if missing:mh='<div style=\"margin-top:12px;\"><div style=\"font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;\">Missing skills</div>'+\"\".join('<span style=\"display:inline-block;background:#fff1f2;color:#be123c;padding:4px 8px;margin:2px;border-radius:12px;font-size:12px;\">'+esc(x)+'</span>' for x in missing)+'</div>'\n    if u:bh='<a href=\"'+esc(u)+'\" style=\"display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:9px 16px;border-radius:6px;font-size:13px;font-weight:600;margin-top:14px;\">View Job</a>'\n    mc=s.get(\"matched_count\"); mc=len(s.get(\"matched\",[]) or []) if mc is None else mc; rc=s.get(\"required_count\"); rc=len(s.get(\"matched\",[]) or [])+len(missing) if rc is None else rc\n    cards.append('<div style=\"border:1px solid #e2e8f0;border-radius:10px;padding:18px;margin-bottom:14px;background:#fff;\"><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td valign=\"top\" style=\"padding-right:15px;\"><div style=\"font-size:12px;font-weight:600;color:#64748b;margin-bottom:4px;\">TOP #'+esc(rank)+'</div><div style=\"font-size:19px;font-weight:700;color:#0f172a;\">'+esc(j.get(\"job_title\"))+'</div><div style=\"font-size:14px;color:#475569;margin-top:4px;\">'+esc(j.get(\"company\"))+' · '+esc(j.get(\"location\"))+'</div></td><td width=\"110\" valign=\"top\" align=\"right\"><div style=\"font-size:25px;font-weight:700;color:#2563eb;\">'+str(num(j.get(\"match_score\")))+'%</div><div style=\"font-size:12px;font-weight:600;color:#64748b;\">'+esc(j.get(\"match_tier\"))+'</div></td></tr></table><div style=\"margin-top:12px;font-size:14px;line-height:1.55;color:#334155;\">'+esc(j.get(\"match_summary\"),\"No match summary available.\")+'</div><div style=\"margin-top:10px;font-size:12px;color:#64748b;\">Skills matched: <strong>'+str(mc)+'</strong> / '+str(rc)+'</div>'+mh+bh+'</div>')\nrows=[]\nfor x in k.get(\"top_missing_skills\",[]) or []:\n    skill=x.get(\"skill\") if isinstance(x,dict) else x; count=esc(x.get(\"count\"),\"\") if isinstance(x,dict) else \"\"\n    rows.append('<tr><td style=\"padding:7px 0;border-bottom:1px solid #e2e8f0;\">'+esc(skill)+'</td><td align=\"right\" style=\"padding:7px 0;border-bottom:1px solid #e2e8f0;\">'+count+'</td></tr>')\nif not rows:rows=['<tr><td colspan=\"2\" style=\"padding:8px 0;color:#64748b;\">No significant missing skills.</td></tr>']\nrows_html=\"\".join(rows); charts_html=\"\".join(chart(q.get(x),x.replace(\"_\",\" \")) for x in [\"match_score\",\"score_breakdown\",\"skills_match\",\"skills_coverage\",\"tier_distribution\",\"missing_skills\"])\nmetrics=[(\"Average Match\",num(k.get(\"average_match_score\"))),(\"Best Match\",num(k.get(\"best_match_score\"))),(\"Skills Match\",num(k.get(\"average_skills_match\"))),(\"Experience Match\",num(k.get(\"average_experience_match\")))]\nmetrics_html=\"\".join('<td width=\"25%\" style=\"padding:8px;\"><div style=\"font-size:12px;color:#64748b;\">'+esc(n)+'</div><div style=\"font-size:24px;font-weight:700;\">'+str(v)+'%</div></td>' for n,v in metrics)\nhtml='<!DOCTYPE html><html><body style=\"margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a;\"><div style=\"max-width:900px;margin:0 auto;padding:24px;\"><div style=\"background:#0f172a;color:#fff;padding:26px;border-radius:12px;margin-bottom:18px;\"><div style=\"font-size:26px;font-weight:700;\">Job Match Report</div><div style=\"font-size:14px;color:#cbd5e1;margin-top:6px;\">Top '+str(len(jobs))+' opportunities based on your resume</div></div><div style=\"background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px;margin-bottom:18px;\"><div style=\"font-size:18px;font-weight:700;margin-bottom:14px;\">Performance Overview</div><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr>'+metrics_html+'</tr></table></div><div style=\"background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px;margin-bottom:18px;\"><div style=\"font-size:18px;font-weight:700;margin-bottom:8px;\">Match Analytics</div>'+charts_html+'</div><div style=\"background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px;margin-bottom:18px;\"><div style=\"font-size:18px;font-weight:700;margin-bottom:10px;\">Skill Gaps</div><div style=\"font-size:14px;color:#475569;margin-bottom:12px;\">Matched skills: <strong>'+str(k.get(\"total_matched_skills\") or 0)+'</strong> · Missing skills: <strong>'+str(k.get(\"total_missing_skills\") or 0)+'</strong></div><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><th align=\"left\" style=\"padding:7px 0;border-bottom:2px solid #e2e8f0;\">Skill</th><th align=\"right\" style=\"padding:7px 0;border-bottom:2px solid #e2e8f0;\">Jobs</th></tr>'+rows_html+'</table></div><div style=\"margin-bottom:18px;\"><div style=\"font-size:20px;font-weight:700;margin-bottom:12px;\">Top Opportunities</div>'+''.join(cards)+'</div><div style=\"font-size:12px;color:#94a3b8;text-align:center;padding:15px;\">Generated automatically by the Job Matching Workflow.</div></div></body></html>'\nreturn [{\"json\":{\"email_subject\":\"Job Match Report — Top \"+str(len(jobs))+\" Opportunities\",\"email_html\":html,\"job_count\":len(jobs),\"report_version\":d.get(\"report_version\",\"1.0\")}}]"
+      },
+      "id": "74270fa1-0e9f-4570-a936-a2471775329f",
+      "name": "Email Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        -224
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "sendTo": "YOUR_EMAIL@example.com",
+        "subject": "={{ $json.email_subject }}",
+        "message": "={{ $json.email_html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "55789455-c60f-4cfb-a2cb-23c3a5cb55c6",
+      "name": "Send a message",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        3248,
+        -224
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"candidate_name\":\"\",\"email\":\"\",\"phone\":\"\",\"location\":\"\",\"target_job_roles\":[],\"technical_skills\":[],\"soft_skills\":[],\"programming_languages\":[],\"data_analytics_tools\":[],\"years_of_experience\":\"\",\"experience_level\":\"\",\"education\":[],\"certifications\":[],\"preferred_job_type\":\"\",\"preferred_locations\":[]}"
+      },
+      "id": "resume-json-parser",
+      "name": "Resume JSON Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -80,
+        -80
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "merge-resume-jobs",
+      "name": "Merge Resume + Jobs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        384,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "def text(v):\n    return str(v or \"\").strip().lower()\n\ndef tokens(v):\n    out = []\n    cur = \"\"\n    for ch in text(v):\n        if (\"a\" <= ch <= \"z\") or (\"0\" <= ch <= \"9\") or ch in \"+#.\":\n            cur += ch\n        else:\n            if cur:\n                out.append(cur)\n                cur = \"\"\n    if cur:\n        out.append(cur)\n    return set(out)\n\ndef arr(v):\n    if isinstance(v, list):\n        return [text(x) for x in v if text(x)]\n    if v in (None, \"\"):\n        return []\n    parts = []\n    cur = \"\"\n    for ch in str(v):\n        if ch in \",;|\\n\":\n            if cur.strip():\n                parts.append(cur.strip())\n            cur = \"\"\n        else:\n            cur += ch\n    if cur.strip():\n        parts.append(cur.strip())\n    return [text(x) for x in parts if text(x)]\n\ndef date_ordinal(y, m, d):\n    y -= 1 if m <= 2 else 0\n    era = y // 400\n    yoe = y - era * 400\n    mp = m + (-3 if m > 2 else 9)\n    doy = (153 * mp + 2) // 5 + d - 1\n    doe = yoe * 365 + yoe // 4 - yoe // 100 + doy\n    return era * 146097 + doe\n\ndef date_parts(s):\n    s = str(s or \"\").strip()\n    if len(s) >= 10 and s[4] == \"-\" and s[7] == \"-\":\n        try:\n            return int(s[0:4]), int(s[5:7]), int(s[8:10])\n        except Exception:\n            return None\n    for sep in (\"-\", \"/\"):\n        p = s.split(sep)\n        if len(p) == 3:\n            try:\n                a, b, c = [int(x) for x in p]\n                if len(p[0]) == 4:\n                    return a, b, c\n                if a > 12:\n                    return c, b, a\n                return c, a, b\n            except Exception:\n                pass\n    return None\n\ndef posted_age_days(v, today_iso):\n    s = text(v)\n    if not s:\n        return None\n    words = s.split()\n    if len(words) >= 3 and words[0].isdigit() and words[2].startswith(\"ago\"):\n        n = int(words[0])\n        unit = words[1].rstrip(\"s\")\n        mult = {\"minute\":0, \"hour\":0, \"day\":1, \"week\":7, \"month\":30}\n        if unit in mult:\n            return mult[unit] * n\n    p = date_parts(s)\n    today = date_parts(today_iso)\n    if p and today:\n        return max(0, date_ordinal(*today) - date_ordinal(*p))\n    return None\n\ndef recency_score(v, today_iso):\n    age = posted_age_days(v, today_iso)\n    if age is None: return 50.0\n    if age <= 3: return 100.0\n    if age <= 7: return 90.0\n    if age <= 14: return 80.0\n    if age <= 30: return 65.0\n    if age <= 60: return 45.0\n    if age <= 90: return 30.0\n    return 15.0\n\ndef relevance_score(job, resume):\n    title = text(job.get(\"job_title\"))\n    roles = arr(resume.get(\"target_job_roles\"))\n    role_scores = []\n    tt = tokens(title)\n    for role in roles:\n        rt = tokens(role)\n        if rt and tt:\n            role_scores.append((len(rt & tt) / max(1, len(rt))) * 100)\n    title_rel = max(role_scores) if role_scores else 50.0\n\n    candidate = set()\n    for key in (\"technical_skills\",\"programming_languages\",\"data_analytics_tools\",\"skills\",\"tools\"):\n        candidate.update(tokens(\" \".join(arr(resume.get(key)))))\n\n    job_skills = set()\n    skills = job.get(\"skills\")\n    if isinstance(skills, dict):\n        for key in (\"required\",\"matched\",\"missing\"):\n            job_skills.update(tokens(\" \".join(arr(skills.get(key)))))\n    else:\n        job_skills.update(tokens(\" \".join(arr(skills))))\n\n    skill_rel = (len(candidate & job_skills) / len(job_skills) * 100) if job_skills else 50.0\n    return round(title_rel * 0.6 + skill_rel * 0.4, 2)\n\nout = []\nfor item in _items:\n    j = dict(item.get(\"json\", {}))\n    resume = j.get(\"resume\") or {}\n    today_iso = j.get(\"currentDate\") or \"\"\n    base = float(j.get(\"match_score\", 0) or 0)\n    rec = recency_score(j.get(\"posted_date\"), today_iso)\n    rel = relevance_score(j, resume)\n    final = round(base * 0.70 + rel * 0.15 + rec * 0.15, 2)\n\n    j[\"base_match_score\"] = round(base, 2)\n    j[\"relevance_score\"] = rel\n    j[\"recency_score\"] = rec\n    j[\"match_score\"] = final\n    j[\"match_score_version\"] = \"1.2.3\"\n    base_breakdown = j.get(\"score_breakdown\") if isinstance(j.get(\"score_breakdown\"), dict) else {}\n    j[\"score_breakdown\"] = {k: round(float(v or 0) * 0.70, 2) for k, v in base_breakdown.items()}\n    j[\"score_breakdown\"][\"relevance\"] = round(rel * 0.15, 2)\n    j[\"score_breakdown\"][\"recency\"] = round(rec * 0.15, 2)\n    j[\"score_factors\"] = {\n        \"base_fit\": round(base, 2),\n        \"relevance\": rel,\n        \"recency\": rec,\n        \"weights\": {\"base_fit\": 70, \"relevance\": 15, \"recency\": 15}\n    }\n    j[\"match_summary\"] = str(j.get(\"match_summary\") or \"\").rstrip() + \" Final score also considers job relevance (15%) and posting recency (15%).\"\n    out.append({\"json\": j})\n\nreturn out"
+      },
+      "id": "bc3ecf9a-74a2-45f4-b7dd-636aed56e7c4",
+      "name": "Recency & Relevance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "includeInputFields": true,
+          "timezone": "Asia/Kolkata"
+        }
+      },
+      "id": "0388d609-ad9a-4458-bfdb-22a02c06273c",
+      "name": "Current Date",
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        928,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "# RANK & SELECT TOP 5 (compact) - n8n Python Code node, \"Run Once for All Items\", no imports.\nTOP_N = 5\nnum = lambda v: v if isinstance(v, (int, float)) else 0\ndct = lambda v: v if isinstance(v, dict) else {}\n\nrows = [dict(i[\"json\"]) for i in _items if isinstance(i[\"json\"], dict)]\nrows = [r for r in rows if str(r.get(\"job_title\") or \"\").strip() and not dct(r.get(\"data_quality\")).get(\"scoring_error\")]\n\ndef key(r):  # best first: score, skills %, fewer missing skills, title %, title A-Z, job_id (final tie-break)\n    return (-num(r.get(\"match_score\")), -num(dct(r.get(\"match_percentages\")).get(\"skills\")),\n            num(dct(r.get(\"skills\")).get(\"missing_count\")), -num(dct(r.get(\"match_percentages\")).get(\"job_title\")),\n            str(r[\"job_title\"]).lower(), str(r.get(\"job_id\") or r.get(\"job_url\") or \"\"))\n\nseen, ranked = set(), []\nfor r in sorted(rows, key=key):\n    d = r.get(\"job_id\") or r.get(\"job_url\") or (r.get(\"company\"), r[\"job_title\"], r.get(\"location\"))\n    if d not in seen:  # same job scraped twice -> keep the best copy\n        seen.add(d)\n        ranked.append(r)\n\navg = round(sum(num(r.get(\"match_score\")) for r in ranked) / len(ranked), 1) if ranked else 0\nreturn [{\"json\": dict(r, rank=n + 1, total_jobs_ranked=len(ranked), pool_avg_score=avg)} for n, r in enumerate(ranked[:TOP_N])]"
+      },
+      "id": "6a1d9c93-3ad7-40b9-ab15-1d41f4ff3fe3",
+      "name": "Rank Top 5 Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        -240
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "TOP_N=5\ndef n(v):\n    try:return round(float(v),2)\n    except:return 0\ndef arr(v):return v if isinstance(v,list) else []\nrows=[]\nfor i in _items:\n    j=i.get(\"json\",{});dq=j.get(\"data_quality\") or {}\n    if j.get(\"scoring_status\")==\"ERROR\" or dq.get(\"scoring_error\") or not j.get(\"job_title\"):continue\n    s=n(j.get(\"match_score\"))\n    if 0<=s<=100:rows.append(j)\nrows=sorted(rows,key=lambda j:n(j.get(\"match_score\")),reverse=True)[:TOP_N]\ndef skill(j):\n    s=j.get(\"skills\") or {};s=s if isinstance(s,dict) else {}\n    req=arr(s.get(\"required\"));mat=arr(s.get(\"matched\"));miss=arr(s.get(\"missing\"));rc=s.get(\"required_count\",len(req));mc=s.get(\"matched_count\",len(mat));xc=s.get(\"missing_count\",len(miss));pct=s.get(\"match_percentage\",(j.get(\"match_percentages\") or {}).get(\"skills\",round(mc/rc*100,2) if rc else 0))\n    return req,mat,miss,rc,mc,xc,n(pct)\nlabels=[f\"#{i+1} {j.get('job_title','')} — {j.get('company','')}\" for i,j in enumerate(rows)];mps=[j.get(\"match_percentages\") or {} for j in rows]\ncharts={\"match_score\":{\"type\":\"bar\",\"labels\":labels,\"values\":[n(j.get(\"match_score\")) for j in rows],\"unit\":\"%\",\"min\":0,\"max\":100},\"score_breakdown\":{\"type\":\"stacked_bar\",\"labels\":labels,\"datasets\":[{\"label\":k.title() if k!=\"job_title\" else \"Job Title\",\"data\":[n(x.get(k)) for x in mps]} for k in (\"skills\",\"experience\",\"job_title\",\"location\",\"job_type\",\"education\")],\"unit\":\"points\",\"min\":0,\"max\":100},\"skills_match\":{\"type\":\"bar\",\"labels\":labels,\"required\":[skill(j)[3] for j in rows],\"matched\":[skill(j)[4] for j in rows],\"missing\":[skill(j)[5] for j in rows]},\"skills_coverage\":{\"type\":\"bar\",\"labels\":labels,\"values\":[skill(j)[6] for j in rows],\"unit\":\"%\",\"min\":0,\"max\":100}}\ntiers={};missfreq={};jobs=[]\nfor i,j in enumerate(rows,1):\n    req,mat,miss,rc,mc,xc,pct=skill(j);tier=str(j.get(\"match_tier\") or \"Unclassified\");tiers[tier]=tiers.get(tier,0)+1\n    for s in miss:missfreq[str(s)]=missfreq.get(str(s),0)+1\n    jobs.append({\"rank\":i,\"job_id\":j.get(\"job_id\"),\"job_title\":j.get(\"job_title\"),\"company\":j.get(\"company\"),\"location\":j.get(\"location\"),\"job_type\":j.get(\"job_type\"),\"experience_level\":j.get(\"experience_level\"),\"posted_date\":j.get(\"posted_date\"),\"job_url\":j.get(\"job_url\"),\"match_score\":n(j.get(\"match_score\")),\"match_tier\":tier,\"match_summary\":j.get(\"match_summary\",\"\"),\"skills\":{\"required\":req,\"matched\":mat,\"missing\":miss,\"required_count\":rc,\"matched_count\":mc,\"missing_count\":xc,\"match_percentage\":pct},\"data_quality\":j.get(\"data_quality\",{})})\norder=[\"Excellent\",\"Strong\",\"Moderate\",\"Low\",\"Unclassified\"];tl=[x for x in order if x in tiers]+[x for x in tiers if x not in order];ms=sorted(missfreq.items(),key=lambda x:(-x[1],x[0].lower()))[:10]\ncharts[\"tier_distribution\"]={\"type\":\"doughnut\",\"labels\":tl,\"values\":[tiers[x] for x in tl]};charts[\"missing_skills\"]={\"type\":\"horizontal_bar\",\"labels\":[x for x,_ in ms],\"values\":[v for _,v in ms],\"unit\":\"jobs\"}\nscores=[n(j.get(\"match_score\")) for j in rows]\nreturn [{\"json\":{\"chart_data_version\":\"1.1\",\"generated_from\":\"Rank Top 5\",\"job_count\":len(rows),\"summary\":{\"average_match_score\":round(sum(scores)/len(scores),2) if scores else 0,\"best_match_score\":max(scores) if scores else 0,\"overall_skill_coverage\":round(sum(j[\"skills\"][\"match_percentage\"] for j in jobs)/len(jobs),2) if jobs else 0,\"tier_counts\":tiers,\"missing_skill_count\":len(missfreq),\"jobs_in_chart\":len(jobs)},\"charts\":charts,\"jobs\":jobs}}]"
+      },
+      "id": "8e41d3bf-03d5-4029-8c07-0e31b5be40df",
+      "name": "Chart Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        80
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Resume file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume file": {
+      "main": [
+        [
+          {
+            "node": "Extract Resume Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Resume Text": {
+      "main": [
+        [
+          {
+            "node": "AI Resume Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Resume Parser": {
+      "main": [
+        [
+          {
+            "node": "Job Scraper",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Resume + Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Resume Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job Scraper": {
+      "main": [
+        [
+          {
+            "node": "Merge Resume + Jobs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Data Validation": {
+      "main": [
+        [
+          {
+            "node": "Rank Top 5 Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KPI Generation": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Report Assembly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report Assembly": {
+      "main": [
+        [
+          {
+            "node": "QuickChart Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QuickChart Generator": {
+      "main": [
+        [
+          {
+            "node": "Email Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Formatter": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Resume + Jobs": {
+      "main": [
+        [
+          {
+            "node": "Normalize Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Jobs": {
+      "main": [
+        [
+          {
+            "node": "Calculate Job Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume JSON Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Resume Parser",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recency & Relevance": {
+      "main": [
+        [
+          {
+            "node": "Data Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Job Match": {
+      "main": [
+        [
+          {
+            "node": "Current Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Current Date": {
+      "main": [
+        [
+          {
+            "node": "Recency & Relevance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rank Top 5 Jobs": {
+      "main": [
+        [
+          {
+            "node": "KPI Generation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Chart Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chart Data": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "saveDataErrorExecution": "all",
+    "executionTimeout": 180
+  },
+  "tags": [],
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
