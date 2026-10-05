@@ -1,0 +1,41 @@
+{
+  "candidate_name": "Jane Doe",
+  "email": "jane@example.com",
+  "phone": "",
+  "location": "Pune, India",
+  "target_job_roles": [
+    "Data Scientist",
+    "Machine Learning Engineer"
+  ],
+  "technical_skills": [
+    "Python",
+    "SQL",
+    "Pandas",
+    "NumPy",
+    "Scikit-learn",
+    "Machine Learning"
+  ],
+  "soft_skills": [
+    "Communication",
+    "Problem Solving"
+  ],
+  "programming_languages": [
+    "Python"
+  ],
+  "data_analytics_tools": [
+    "Jupyter",
+    "Power BI"
+  ],
+  "years_of_experience": 2,
+  "experience_level": "Entry",
+  "education": [
+    "B.Tech Computer Science"
+  ],
+  "certifications": [],
+  "preferred_job_type": "Full-time",
+  "preferred_locations": [
+    "Pune",
+    "Bengaluru",
+    "Remote"
+  ]
+}
