@@ -21,7 +21,7 @@
           "value": "YOUR_RESUME_FILE_ID",
           "mode": "list",
           "cachedResultName": "YOUR_RESUME_FILE.pdf",
-          "cachedResultUrl": "https://drive.google.com/file/d/YOUR_RESUME_FILE_ID/view?usp=drivesdk"
+          "cachedResultUrl": "https://drive.google.com/file/d/YOUR_RESUME_FILE_ID/view"
         },
         "options": {}
       },
@@ -567,13 +567,6 @@
         ]
       ]
     }
-  },
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": true,
-    "saveDataErrorExecution": "all",
-    "executionTimeout": 180
   },
   "tags": [],
   "pinData": {},
